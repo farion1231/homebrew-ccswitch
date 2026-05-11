@@ -1,5 +1,9 @@
 # Homebrew Tap for CC Switch
 
+### 🌐 The Only Official Website: **[ccswitch.io](https://ccswitch.io)**
+
+This tap distributes [CC Switch](https://ccswitch.io), the cross-platform desktop manager for Claude Code, Codex, OpenCode, OpenClaw, Gemini CLI & Hermes Agent.
+
 ## Installation
 
 ```bash
