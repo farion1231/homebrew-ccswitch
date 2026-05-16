@@ -1,0 +1,84 @@
+name: Auto Bump Cask
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch latest release and compare
+        id: bump
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_JSON=$(curl -fsSL \
+            -H "Authorization: Bearer ${GITHUB_TOKEN:?}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/farion1231/cc-switch/releases/latest)
+          echo "$RELEASE_JSON"
+
+          LATEST=$(echo "$RELEASE_JSON" | jq -r '.tag_name | sub("^v"; "")')
+          CURRENT=$(grep 'version ".*"' Casks/cc-switch.rb | sed 's/.*"\(.*\)".*/\1/')
+
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+
+          if [ "$LATEST" != "$CURRENT" ]; then
+            # Verify release uploaded by GitHub Actions bot
+            UPLOADER=$(echo "$RELEASE_JSON" | jq -r '.author.login')
+            UPLOADER_ID=$(echo "$RELEASE_JSON" | jq -r '.author.id')
+            GITHUB_ACTIONS_BOT_ID=41898282
+            GITHUB_ACTIONS_BOT_LOGIN="github-actions[bot]"
+
+            if [ "$UPLOADER" != "$GITHUB_ACTIONS_BOT_LOGIN" ] || [ "$UPLOADER_ID" != "$GITHUB_ACTIONS_BOT_ID" ]; then
+              echo "ERROR: Release not uploaded by GitHub Actions bot (uploader: $UPLOADER, ID: $UPLOADER_ID)"
+              exit 1
+            fi
+
+            # Get sha256 digest from asset
+            SHA256=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | endswith("macOS.tar.gz")) | .digest | sub("^sha256:"; "")')
+            echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+            echo "need_bump=true" >> "$GITHUB_OUTPUT"
+            echo "Bumping: $CURRENT -> $LATEST"
+          else
+            echo "need_bump=false" >> "$GITHUB_OUTPUT"
+            echo "Up to date: $CURRENT"
+          fi
+
+      - name: Update, commit & test
+        if: steps.bump.outputs.need_bump == 'true'
+        run: |
+          VERSION="${{ steps.bump.outputs.latest }}"
+          SHA256="${{ steps.bump.outputs.sha256 }}"
+          sed -i '' "s/version \".*\"/version \"$VERSION\"/" Casks/cc-switch.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"$SHA256\"/" Casks/cc-switch.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/cc-switch.rb
+          git commit -m "chore: bump cc-switch to v${{ steps.bump.outputs.latest }}"
+
+          brew tap farion1231/homebrew-ccswitch "$PWD"
+          brew tap-info farion1231/homebrew-ccswitch
+          brew install --cask farion1231/ccswitch/cc-switch
+
+      - name: Create pull request
+        if: steps.bump.outputs.need_bump == 'true'
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "chore: bump cc-switch to v${{ steps.bump.outputs.latest }}"
+          branch: "bump/cc-switch-${{ steps.bump.outputs.latest }}"
+          delete-branch: true
+          body: |
+            Auto-bumped cc-switch to version ${{ steps.bump.outputs.latest }}.

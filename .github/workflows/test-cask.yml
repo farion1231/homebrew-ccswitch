@@ -1,0 +1,27 @@
+name: Test Cask
+
+on:
+  pull_request:
+    paths:
+      - Casks/**
+  push:
+    branches:
+      - main
+    paths:
+      - Casks/**
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test cask
+        run: |
+          git show
+          brew tap farion1231/homebrew-ccswitch "$PWD"
+          brew install --cask farion1231/ccswitch/cc-switch
