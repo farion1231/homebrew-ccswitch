@@ -1,3 +1,5 @@
+# DEPRECATED: This tap has been superseded by the official homebrew/cask entry.
+# Please use `brew install --cask cc-switch` directly without adding this tap.
 cask "cc-switch" do
   version "3.15.0"
   sha256 "2b53643202c66eb84f3b1f3604c6486e6a8bcb9b4b3312be9f5d6a349f658019"
